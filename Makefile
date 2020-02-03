@@ -55,6 +55,9 @@ test: dockerimage
 bench: dockerimage
 	@$(DOCKERGOCOMMAND) test -bench ./...
 
+fmt:
+	@go fmt ./...
+
 clean:
 	@docker rmi $(DOCKER_IMAGE_NAME)
 	@rm -rvf $(CURDIR)/bin
