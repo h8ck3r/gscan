@@ -14,18 +14,18 @@ import (
 )
 
 var (
-	verbose   = false
-	hosts     []string
-	ports     []int
-	logger    = log.New(os.Stdout, "", 0)
+	verbose = false
+	hosts   []string
+	ports   []int
+	logger  = log.New(os.Stdout, "", 0)
 
-	hostResults []*HostResult
+	hostResults   []*HostResult
 	hostWaitGroup sync.WaitGroup
 )
 
 const (
-	Closed   PortState = "closed"
-	Open     PortState = "open"
+	Closed PortState = "closed"
+	Open   PortState = "open"
 )
 
 type HostResult struct {
@@ -92,7 +92,7 @@ func validateArgs() {
 func portWorker(host string, port int, portResultChan chan *PortResult, portWaitGroup *sync.WaitGroup) {
 	address := fmt.Sprintf(host+":%d", port)
 	conn, err := net.Dial("tcp", address)
-	var portResult PortResult
+	portResult := PortResult{}
 
 	if err != nil {
 		portResult.Port = port
