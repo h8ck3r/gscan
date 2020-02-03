@@ -171,7 +171,7 @@ func summary(result *HostResult) {
 	}
 	if verbose {
 		for _, port := range result.ClosedPorts {
-			logger.Printf("Port %d on is %s\n", port, result.Host)
+			logger.Printf("Port %d on %s is %s\n", port, result.Host, Closed)
 		}
 	}
 }
