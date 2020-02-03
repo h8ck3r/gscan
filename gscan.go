@@ -3,18 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/pkg/errors"
 	"log"
 	"net"
 	"os"
 	"sort"
 	"strings"
-
-	//"strings"
 	"sync"
 	"syscall"
 
-	//"github.com/pkg/errors"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -23,8 +20,9 @@ var (
 	ports   []int
 	logger  = log.New(os.Stdout, "", 0)
 	errLogger  = log.New(os.Stderr, "", 1)
-	hostResults   []HostResult
+	hostResults   []*HostResult
 	hostWaitGroup sync.WaitGroup
+	hostArg string
 )
 
 const (
@@ -50,21 +48,21 @@ func init() {
 	logger.SetPrefix("")
 }
 
-func generateHostList(hostArg string) ([]string, error) {
-	if strings.Contains(hostArg, ",") {
-		return strings.Split(hostArg, ","), nil
-	} else if strings.Contains(hostArg, "-") {
+func generateHostList(arg string) ([]string, error) {
+	if strings.Contains(arg, ",") {
+		return strings.Split(arg, ","), nil
+	} else if strings.Contains(arg, "-") {
 		return nil, errors.Errorf("IP range definitions are not yet supported")
-	} else if strings.Contains(hostArg, "/") {
-		return getHostsForSubnet(hostArg)
+	} else if strings.Contains(arg, "/") {
+		return getHostsForSubnet(arg)
 	} else {
-		addr := net.ParseIP(hostArg)
+		addr := net.ParseIP(arg)
 		if addr == nil {
-			hostname, err := net.LookupHost(hostArg)
+			hostname, err := net.LookupHost(arg)
 			if err != nil {
 				return nil, err
 			} else if hostname == nil {
-				return nil, errors.Errorf("failed to receive IP addresses or hostnames for %s", hostArg)
+				return nil, errors.Errorf("failed to receive IP addresses or hostnames for %s", arg)
 			} else {
 				return hostname, nil
 			}
@@ -85,6 +83,7 @@ func validateArgs() {
 		if arg == "-v" || arg == "--verbose" {
 			verbose = true
 		} else {
+			hostArg = arg
 			hostList, err := generateHostList(arg)
 			if err != nil {
 				errLogger.Fatal(err)
@@ -121,9 +120,7 @@ func getHostsForSubnet(network string) ([]string, error) {
 func portWorker(host string, port int, portResultChan chan *PortResult, portWaitGroup *sync.WaitGroup) {
 	address := fmt.Sprintf(host+":%d", port)
 	portResult := PortResult{}
-
 	conn, err := net.Dial("tcp", address)
-
 	if err != nil {
 		portResult.Port = port
 		portResult.State = Closed
@@ -140,7 +137,6 @@ func portWorker(host string, port int, portResultChan chan *PortResult, portWait
 }
 
 func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostWaitGroup *sync.WaitGroup) {
-	logger.Printf("Initializing scan for %s\n", host)
 	portResultChan := make(chan *PortResult)
 	var portWaitGroup sync.WaitGroup
 	var hostResult HostResult
@@ -165,21 +161,17 @@ func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostW
 	hostResultChan <- &hostResult
 	close(portResultChan)
 	hostWaitGroup.Done()
-	logger.Printf("Scanned %s\n", host)
 }
 
-func summary(hostResults []HostResult) {
-	for _, result := range hostResults {
-		sort.Ints(result.OpenPorts)
-		sort.Ints(result.ClosedPorts)
-
-		for _, port := range result.OpenPorts {
-			logger.Printf("Discovered open port %d on %s\n", port, result.Host)
-		}
-		if verbose {
-			for _, port := range result.ClosedPorts {
-				logger.Printf("Port %d on is %s\n", port, result.Host)
-			}
+func summary(result *HostResult) {
+	sort.Ints(result.OpenPorts)
+	sort.Ints(result.ClosedPorts)
+	for _, port := range result.OpenPorts {
+		logger.Printf("Discovered open port %d on %s\n", port, result.Host)
+	}
+	if verbose {
+		for _, port := range result.ClosedPorts {
+			logger.Printf("Port %d on is %s\n", port, result.Host)
 		}
 	}
 }
@@ -194,25 +186,16 @@ func main() {
 	for i := 1; i <= 100; i++ {
 		ports = append(ports, i)
 	}
-
+	logger.Printf("Initializing scan for %s\n", hostArg)
 	for _, host := range hosts {
 		hostWaitGroup.Add(1)
 		go hostWorker(host, ports, hostResultChan, &hostWaitGroup)
 	}
 
-	var hostResultWaitGroup sync.WaitGroup
-
 	for range hosts {
-		hostResultWaitGroup.Add(1)
-		go func() {
-			hostResult := <-hostResultChan
-			hostResults = append(hostResults, *hostResult)
-			hostResultWaitGroup.Done()
-		}()
+		summary(<-hostResultChan)
 	}
 	hostWaitGroup.Wait()
-	hostResultWaitGroup.Wait()
-	summary(hostResults)
 
 	close(hostResultChan)
 
