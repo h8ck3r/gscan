@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	
+
 
 	"github.com/pkg/errors"
 )
@@ -46,12 +46,13 @@ type PortResult struct {
 
 func init() {
 	logger.SetPrefix("")
+	flag.BoolVar(&verbose, "verbose", false, "verbose output")
 }
 
 func generateHostList(arg string) ([]string, error) {
 	if strings.Contains(arg, ",") {
 		return strings.Split(arg, ","), nil
-	} else if strings.Contains(arg, "-") {
+	} else if strings.Contains(arg, "-") && arg != "-verbose" {
 		return nil, errors.Errorf("IP range definitions are not yet supported")
 	} else if strings.Contains(arg, "/") {
 		return getHostsForSubnet(arg)
@@ -79,8 +80,8 @@ func validateArgs() {
 	}
 
 	for _, arg := range os.Args[1:] {
-		if arg == "-v" || arg == "--verbose" {
-			verbose = true
+		if arg == "-v" || arg == "--verbose" || arg == "-verbose" {
+			continue
 		} else {
 			hostArg = arg
 			hostList, err := generateHostList(arg)
