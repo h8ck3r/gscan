@@ -1,10 +1,11 @@
-DOCKER_GOOS ?= $(GOOS)
-DOCKER_GOARCH ?= $(GOARCH)
-DOCKER_GO111MODULE := on
-DOCKER_CGO_ENABLED ?= 0
+DOCKER_GOOS			?= $(GOOS)
+DOCKER_GOARCH		?= $(GOARCH)
+DOCKER_GO111MODULE	:= on
+DOCKER_CGO_ENABLED	?= 0
 
-PROJECT_NAME := gscan
-DOCKER_IMAGE_NAME := gscan
+PROJECT_NAME		:= gscan
+DOCKER_IMAGE_NAME	:= gscan
+GOLINT				:= $(BIN)/golint
 
 ifeq ($(DOCKER_GOOS),)
 	DOCKER_GOOS := linux
@@ -79,4 +80,5 @@ clean: ## cleanup the build and docker cache
 
 .PHONY: help
 help: ## Display this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<configurations> <target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = "[ :?=##]"; printf "\nConfigurations:\n"}; length($0)>1 && /^[A-Z]/ {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
