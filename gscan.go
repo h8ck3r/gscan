@@ -75,8 +75,7 @@ func generateHostList(arg string) ([]string, error) {
 func validateArgs() {
 	flag.Parse()
 	if flag.NArg() < 1 {
-		_, _ = syscall.Write(2, []byte("Please specify at least one IP to scan\n"))
-		os.Exit(1)
+		errLogger.Fatalf("Please specify at least one IP to scan\n")
 	}
 
 	for _, arg := range os.Args[1:] {
