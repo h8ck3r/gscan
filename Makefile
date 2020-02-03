@@ -18,7 +18,7 @@ ifeq ($(DOCKER_GO111MODULE),)
 	DOCKER_GO111MODULE := on
 endif
 
-DOCKERGOCOMMAND=@docker run --gpus all -v $(CURDIR):/go/src/github.com/h8ck3r/$(PROJECT_NAME) --userns host -w /go/src/github.com/h8ck3r/$(PROJECT_NAME) -e GOOS=$(DOCKER_GOOS) -e GOARCH=$(DOCKER_GOARCH) -e GO111MODULE=$(DOCKER_GO111MODULE) -e CGO_ENABLED=$(DOCKER_CGO_ENABLED) --rm -it $(DOCKER_IMAGE_NAME) go
+DOCKERGOCOMMAND := @docker run --gpus all -v $(CURDIR):/go/src/github.com/h8ck3r/$(PROJECT_NAME) --userns host -w /go/src/github.com/h8ck3r/$(PROJECT_NAME) -e GOOS=$(DOCKER_GOOS) -e GOARCH=$(DOCKER_GOARCH) -e GO111MODULE=$(DOCKER_GO111MODULE) -e CGO_ENABLED=$(DOCKER_CGO_ENABLED) --rm -it $(DOCKER_IMAGE_NAME) go
 
 PREFIX = $(CURDIR)
 BIN = $(PREFIX)/bin
