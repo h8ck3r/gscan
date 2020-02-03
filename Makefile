@@ -29,10 +29,10 @@ OUT = $(PROJECT_NAME)
 SRC = $(PROJECT_NAME).go
 
 .PHONY: all
-all: build
+all: build ## run target build
 
 .PHONY: dockerimage
-dockerimage:
+dockerimage: ## build the golang docker image for this project
 	@docker build -t $(DOCKER_IMAGE_NAME) .
 
 $(BIN):
@@ -47,22 +47,22 @@ $(CONFDIR)/%:
 	@touch $(CONFDIR)/test.txt
 
 .PHONY: config
-config: $(CONFDIR)/$(PROJECT_NAME)
+config: $(CONFDIR)/$(PROJECT_NAME) ## create the configuration directory
 
 .PHONY: build
-build: dockerimage
+build: dockerimage ## compile the binary
 	@$(DOCKERGOCOMMAND) build -x -v -o $(OUT) $(SRC)
 
 .PHONY: test
-test: dockerimage
+test: dockerimage ## run all tests
 	@docker run --gpus all -v $(CURDIR):/go/src/github.com/h8ck3r/$(PROJECT_NAME) --userns host -w /go/src/github.com/h8ck3r/$(PROJECT_NAME) -e GOOS=$(DOCKER_GOOS) -e GOARCH=$(DOCKER_GOARCH) -e GO111MODULE=$(DOCKER_GO111MODULE) -e CGO_ENABLED=1 --rm -it $(DOCKER_IMAGE_NAME) go test -race -v ./... | sed -e '/PASS/ s//$(shell printf "\033[32mPASS\033[0m")/' -e '/FAIL/ s//$(shell printf "\033[31mFAIL\033[0m")/' -e '/SKIP/ s//$(shell printf "\033[93mSKIP\033[0m")/'
 
 .PHONY: bench
-bench: dockerimage
+bench: dockerimage ## run all benchmarks
 	@$(DOCKERGOCOMMAND) test -bench ./...
 
 .PHONY: fmt
-fmt:
+fmt: ## format all go files
 	@go fmt ./...
 
 .PHONY: lint
@@ -70,7 +70,7 @@ lint: | $(BIN)/golint ## run golint
 	@$(GOLINT) -set_exit_status ./...
 
 .PHONY: clean
-clean:
+clean: ## cleanup the build and docker cache
 	@docker rmi $(DOCKER_IMAGE_NAME)
 	@rm -rvf $(CURDIR)/bin
 	@go clean -x -v
