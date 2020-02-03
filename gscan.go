@@ -16,6 +16,7 @@ import (
 var (
 	verbose   = false
 	hosts     []string
+	ports     []int
 	logger    = log.New(os.Stdout, "", 1)
 	errLogger = log.New(os.Stderr, "", 1)
 )
@@ -160,8 +161,6 @@ func main() {
 	var hostWaitGroup sync.WaitGroup
 
 	logger.Println("starting scan...")
-
-	var ports []int
 
 	for i := 1; i <= 1024; i++ {
 		ports = append(ports, i)
