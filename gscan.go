@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"sort"
@@ -13,9 +14,10 @@ import (
 )
 
 var (
-	verbose = false
-	hosts   []string
-	hostWaitGroup sync.WaitGroup
+	verbose   = false
+	hosts     []string
+	logger    = log.New(os.Stdout, "", 1)
+	errLogger = log.New(os.Stderr, "", 1)
 )
 
 const (
@@ -25,9 +27,9 @@ const (
 )
 
 type HostResult struct {
-	Host string
-	Ports []PortResult
-	OpenPorts []int
+	Host        string
+	Ports       []PortResult
+	OpenPorts   []int
 	ClosedPorts []int
 }
 
@@ -38,8 +40,11 @@ type PortResult struct {
 	State PortState
 }
 
-func generateHostList(hostArg string) ([]string, error) {
+func init() {
+	logger.SetPrefix("")
+}
 
+func generateHostList(hostArg string) ([]string, error) {
 	if strings.Contains(hostArg, ",") {
 		return strings.Split(hostArg, ","), nil
 	} else if strings.Contains(hostArg, "-") {
@@ -52,12 +57,13 @@ func generateHostList(hostArg string) ([]string, error) {
 				return nil, err
 			} else if hostname == nil {
 				return nil, errors.Errorf("failed to receive IP addresses or hostnames for %s", hostArg)
+			} else {
+				return hostname, nil
 			}
 		} else {
 			return []string{addr.String()}, nil
 		}
 	}
-	return nil, errors.Errorf("an unknown error occurred")
 }
 
 func validateArgs() {
@@ -81,61 +87,65 @@ func validateArgs() {
 	}
 }
 
-func portWorkers(host string, portResultsChan chan *PortResult, portsChan chan int, portWaitGroup *sync.WaitGroup) {
-	port := <-portsChan
-	address := fmt.Sprintf(host + ":%d", port)
+func portWorker(host string, port int, portResultChan chan *PortResult, portWaitGroup *sync.WaitGroup) {
+	address := fmt.Sprintf(host+":%d", port)
 	conn, err := net.Dial("tcp", address)
+	var portResult = &PortResult{}
 
-	if err != nil || conn == nil {
-		portResultsChan <- &PortResult{
-			Port:  port,
-			State: Closed,
-		}
+	if err != nil {
+		portResult.Port = port
+		portResult.State = Closed
 	} else {
-		conn.Close()
-		portResultsChan <- &PortResult{
-			Port: port,
-			State: Open,
-		}
+		portResult.Port = port
+		portResult.State = Open
+	}
+	if conn != nil {
+		_ = conn.Close()
 	}
 
+	portResultChan <- portResult
 	portWaitGroup.Done()
 }
 
-func hostWorkers(hostsChan chan string, hostResultsChan chan *HostResult, portResultsChan chan *PortResult, portsChan chan int, hostWaitGroup *sync.WaitGroup) {
-	host := <-hostsChan
+func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostWaitGroup *sync.WaitGroup) {
+	logger.Printf("Initializing scan for %s\n", host)
+	portResultChan := make(chan *PortResult)
 	var portWaitGroup sync.WaitGroup
 	var hostResult = &HostResult{}
 
-	for i:=1; i <= cap(portsChan); i++ {
-		portWaitGroup.Add(1)
-		go portWorkers(host, portResultsChan, portsChan, &portWaitGroup)
+	portWaitGroup.Add(len(ports))
+	for _, port := range ports {
+		go portWorker(host, port, portResultChan, &portWaitGroup)
 	}
 
-	for i := 1; i <= cap(portsChan); i++ {
-		portsChan <- i
-		portResult := <-portResultsChan
-		if portResult.Port != 0 {
-			hostResult.OpenPorts = append(hostResult.OpenPorts, portResult.Port)
-		} else {
-			hostResult.ClosedPorts = append(hostResult.ClosedPorts, portResult.Port)
+	for range ports {
+		select {
+		case portResult := <-portResultChan:
+			if portResult.Port != 0 {
+				hostResult.OpenPorts = append(hostResult.OpenPorts, portResult.Port)
+			} else {
+				hostResult.ClosedPorts = append(hostResult.ClosedPorts, portResult.Port)
+			}
+			break
 		}
 	}
 
 	portWaitGroup.Wait()
-	hostResultsChan <- hostResult
+	hostResultChan <- hostResult
+	close(portResultChan)
 	hostWaitGroup.Done()
 }
 
 func summary(hostResults []*HostResult) {
+
 	for _, result := range hostResults {
 		sort.Ints(result.OpenPorts)
 		sort.Ints(result.ClosedPorts)
 		for _, port := range result.Ports {
 			if port.State == Open {
-				fmt.Printf("Discovered open port %d on %s\n", port.Port, result.Host)
+				logger.Printf("Discovered open port %d on %s\n", port.Port, result.Host)
 			} else if port.State == Closed && verbose {
-				fmt.Printf("Port %d on is %s\n", port.Port, result.Host)
+				logger.Printf("Port %d on is %s\n", port.Port, result.Host)
 			}
 		}
 	}
@@ -144,33 +154,41 @@ func summary(hostResults []*HostResult) {
 func main() {
 	validateArgs()
 
-	hostsChan := make(chan string, len(hosts))
-	portsChan := make(chan int, 1024)
-	hostResultsChan := make(chan *HostResult)
-	portResultsChan := make(chan *PortResult)
+	hostResultChan := make(chan *HostResult)
 
 	var hostResults []*HostResult
+	var hostWaitGroup sync.WaitGroup
 
-	fmt.Println("starting scan...")
+	logger.Println("starting scan...")
 
-	for i:=0; i < cap(hostsChan); i++ {
-		hostWaitGroup.Add(1)
-		fmt.Printf("Initializing scan for %s\n", hosts[i])
-		go hostWorkers(hostsChan, hostResultsChan, portResultsChan, portsChan, &hostWaitGroup)
+	var ports []int
+
+	for i := 1; i <= 1024; i++ {
+		ports = append(ports, i)
 	}
 
-	for _, host := range hosts {
-		hostsChan <- host
-		hostResults = append(hostResults, <-hostResultsChan)
+	go func() {
+		for _, host := range hosts {
+			hostWaitGroup.Add(1)
+			go hostWorker(host, ports, hostResultChan, &hostWaitGroup)
+		}
+	}()
+
+	for range hosts {
+		select {
+		case hostResult := <-hostResultChan:
+			hostResults = append(hostResults, hostResult)
+			break
+		}
+
+		logger.Println("got host report")
+		hostResults = append(hostResults, <-hostResultChan)
 	}
 
 	hostWaitGroup.Wait()
 	summary(hostResults)
 
-	close(hostsChan)
-	close(portsChan)
-	close(hostResultsChan)
-	close(portResultsChan)
+	close(hostResultChan)
 
-	fmt.Println("scan done.")
+	logger.Printf("\nscan done.\n")
 }
