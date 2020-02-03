@@ -17,14 +17,15 @@ var (
 	verbose   = false
 	hosts     []string
 	ports     []int
-	logger    = log.New(os.Stdout, "", 1)
-	errLogger = log.New(os.Stderr, "", 1)
+	logger    = log.New(os.Stdout, "", 0)
+
+	hostResults []*HostResult
+	hostWaitGroup sync.WaitGroup
 )
 
 const (
 	Closed   PortState = "closed"
 	Open     PortState = "open"
-	Filtered PortState = "filtered"
 )
 
 type HostResult struct {
@@ -91,7 +92,7 @@ func validateArgs() {
 func portWorker(host string, port int, portResultChan chan *PortResult, portWaitGroup *sync.WaitGroup) {
 	address := fmt.Sprintf(host+":%d", port)
 	conn, err := net.Dial("tcp", address)
-	var portResult = &PortResult{}
+	var portResult PortResult
 
 	if err != nil {
 		portResult.Port = port
@@ -104,15 +105,15 @@ func portWorker(host string, port int, portResultChan chan *PortResult, portWait
 		_ = conn.Close()
 	}
 
-	portResultChan <- portResult
+	portResultChan <- &portResult
 	portWaitGroup.Done()
 }
 
-func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostWaitGroup *sync.WaitGroup) {
+func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostWaitGroup *sync.WaitGroup, hostMutex *sync.Mutex) {
 	logger.Printf("Initializing scan for %s\n", host)
 	portResultChan := make(chan *PortResult)
 	var portWaitGroup sync.WaitGroup
-	var hostResult = &HostResult{}
+	var hostResult HostResult
 
 	portWaitGroup.Add(len(ports))
 	for _, port := range ports {
@@ -122,17 +123,17 @@ func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostW
 	for range ports {
 		select {
 		case portResult := <-portResultChan:
+			hostMutex.Lock()
 			if portResult.Port != 0 {
 				hostResult.OpenPorts = append(hostResult.OpenPorts, portResult.Port)
 			} else {
 				hostResult.ClosedPorts = append(hostResult.ClosedPorts, portResult.Port)
 			}
-			break
+			hostMutex.Unlock()
 		}
 	}
-
 	portWaitGroup.Wait()
-	hostResultChan <- hostResult
+	hostResultChan <- &hostResult
 	close(portResultChan)
 	hostWaitGroup.Done()
 }
@@ -157,8 +158,8 @@ func main() {
 
 	hostResultChan := make(chan *HostResult)
 
-	var hostResults []*HostResult
-	var hostWaitGroup sync.WaitGroup
+	var hostMutex sync.Mutex
+	var hostResultMutex sync.Mutex
 
 	logger.Println("starting scan...")
 
@@ -166,24 +167,19 @@ func main() {
 		ports = append(ports, i)
 	}
 
-	go func() {
-		for _, host := range hosts {
-			hostWaitGroup.Add(1)
-			go hostWorker(host, ports, hostResultChan, &hostWaitGroup)
-		}
-	}()
-
-	for range hosts {
-		select {
-		case hostResult := <-hostResultChan:
-			hostResults = append(hostResults, hostResult)
-			break
-		}
-
-		logger.Println("got host report")
-		hostResults = append(hostResults, <-hostResultChan)
+	for _, host := range hosts {
+		hostWaitGroup.Add(1)
+		go hostWorker(host, ports, hostResultChan, &hostWaitGroup, &hostMutex)
 	}
 
+	for range hosts {
+		go func() {
+			hostResult := <-hostResultChan
+			hostResultMutex.Lock()
+			hostResults = append(hostResults, hostResult)
+			hostResultMutex.Unlock()
+		}()
+	}
 	hostWaitGroup.Wait()
 	summary(hostResults)
 
