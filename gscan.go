@@ -3,21 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/pkg/errors"
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
-
-
-	"github.com/pkg/errors"
+	"time"
 )
 
 var (
 	verbose = false
 	hosts   []string
 	ports   []int
+	goroutineCap int
+	timeout time.Duration
 	logger  = log.New(os.Stdout, "", 0)
 	errLogger  = log.New(os.Stderr, "", 1)
 	hostResults   []*HostResult
@@ -47,12 +49,14 @@ type PortResult struct {
 func init() {
 	logger.SetPrefix("")
 	flag.BoolVar(&verbose, "verbose", false, "verbose output")
+	flag.IntVar(&goroutineCap, "cap", 0, "the maximum number of parallel goroutines (0 is infinite)")
+	flag.DurationVar(&timeout, "timeout", 4000, "connection timeout (in milliseconds)")
 }
 
 func generateHostList(arg string) ([]string, error) {
 	if strings.Contains(arg, ",") {
 		return strings.Split(arg, ","), nil
-	} else if strings.Contains(arg, "-") && arg != "-verbose" {
+	} else if regexp.MustCompile(`^([0-9]{1,3}(-[0-9]{1,3})?\.){3}[0-9]{1,3}(-[0-9]{1,3})?$`).MatchString(arg) {
 		return nil, errors.Errorf("IP range definitions are not yet supported")
 	} else if strings.Contains(arg, "/") {
 		return getHostsForSubnet(arg)
@@ -77,6 +81,10 @@ func validateArgs() {
 	flag.Parse()
 	if flag.NArg() < 1 {
 		errLogger.Fatalf("Please specify at least one IP to scan\n")
+	}
+
+	if goroutineCap < 0 {
+		errLogger.Fatalf("Please set the goroutine cap to a value greater than 0, or zero for infinite\n")
 	}
 
 	for _, arg := range os.Args[1:] {
@@ -119,12 +127,13 @@ func getHostsForSubnet(network string) ([]string, error) {
 
 func portWorker(host string, port int, portResultChan chan *PortResult, portWaitGroup *sync.WaitGroup) {
 	address := fmt.Sprintf(host+":%d", port)
-	portResult := PortResult{}
-	conn, err := net.Dial("tcp", address)
+	var portResult = &PortResult{}
+	conn, err := net.DialTimeout("tcp", address, time.Millisecond * timeout)
 	if err != nil {
 		portResult.Port = port
 		portResult.State = Closed
 	} else {
+		logger.Printf("%s %s\n", address, Open)
 		portResult.Port = port
 		portResult.State = Open
 	}
@@ -132,12 +141,15 @@ func portWorker(host string, port int, portResultChan chan *PortResult, portWait
 		_ = conn.Close()
 	}
 
-	portResultChan <- &portResult
+	portResultChan <- portResult
 	portWaitGroup.Done()
 }
 
 func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostWaitGroup *sync.WaitGroup) {
-	portResultChan := make(chan *PortResult)
+	if verbose {
+		logger.Printf("Initializing scan for %s\n", host)
+	}
+	portResultChan := make(chan *PortResult, len(ports))
 	var portWaitGroup sync.WaitGroup
 	var hostResult HostResult
 
@@ -163,7 +175,7 @@ func hostWorker(host string, ports []int, hostResultChan chan *HostResult, hostW
 	hostWaitGroup.Done()
 }
 
-func summary(result *HostResult) {
+func summary(result *HostResult, hostResultWaitGroup *sync.WaitGroup) {
 	sort.Ints(result.OpenPorts)
 	sort.Ints(result.ClosedPorts)
 	for _, port := range result.OpenPorts {
@@ -174,29 +186,34 @@ func summary(result *HostResult) {
 			logger.Printf("Port %d on %s is %s\n", port, result.Host, Closed)
 		}
 	}
+	hostResultWaitGroup.Done()
 }
 
 func main() {
 	validateArgs()
 
-	hostResultChan := make(chan *HostResult)
-
-	logger.Println("starting scan...")
+	hostResultChan := make(chan *HostResult, len(hosts))
 
 	for i := 1; i <= 100; i++ {
 		ports = append(ports, i)
+
 	}
 	logger.Printf("Initializing scan for %s\n", hostArg)
-	for _, host := range hosts {
+	for index, host := range hosts {
 		hostWaitGroup.Add(1)
 		go hostWorker(host, ports, hostResultChan, &hostWaitGroup)
+		if goroutineCap != 0 && index != 0 && index % goroutineCap == 0 {
+			hostWaitGroup.Wait()
+		}
 	}
 
+	var hostResultWaitGroup sync.WaitGroup
 	for range hosts {
-		summary(<-hostResultChan)
+		hostResultWaitGroup.Add(1)
+		go summary(<-hostResultChan, &hostResultWaitGroup)
 	}
 	hostWaitGroup.Wait()
-
+	hostResultWaitGroup.Wait()
 	close(hostResultChan)
 
 	logger.Printf("\nscan done.\n")
