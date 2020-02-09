@@ -3,15 +3,34 @@ package util
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/pkg/errors"
 	"net"
+	"regexp"
 	"strconv"
 )
 
-func GetHostsForIPRange(network string) ([]string, error) {
-	return nil, nil
+func GetTargets(argument string) ([]string, error) {
+	var targets []string
+
+	if regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}$`).MatchString(argument) {
+		targets = []string{argument}
+		return targets, nil
+	} else if regexp.MustCompile(`^([0-9]{1,3}(-[0-9]{1,3})?\.){3}[0-9]{1,3}(-[0-9]{1,3})?$`).MatchString(argument) {
+		_, _ = getHostsForIPRange(argument)
+		return targets, errors.Errorf("ip range definitions are not yet supported")
+	} else if regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`).MatchString(argument) {
+		return getHostsForSubnet(argument)
+	} else {
+		return targets, errors.Errorf("invalid argument: %s\n", argument)
+	}
 }
 
-func GetHostsForSubnet(network string) ([]string, error) {
+func getHostsForIPRange(network string) ([]string, error) {
+	network = ""
+	return []string{network}, nil
+}
+
+func getHostsForSubnet(network string) ([]string, error) {
 	address, ipNet, err := net.ParseCIDR(network)
 	if err != nil {
 		return nil, err
