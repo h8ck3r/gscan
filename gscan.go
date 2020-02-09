@@ -1,22 +1,30 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
-	"flag"
-	"fmt"
-	"github.com/pkg/errors"
+	"github.com/h8ck3r/gscan/internal/cli"
+	"github.com/h8ck3r/gscan/pkg/types"
 	"log"
-	"net"
-	"os"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 )
 
+var (
+	scan types.Scan
+	scanner types.Scanner
+	ports []types.Port
+)
+
+func main() {
+	cli.Parse()
+	log.Println(cli.Targets)
+	scan.Timeout = cli.Timeout
+	scan.GoroutineCap = cli.GoroutineCap
+	scan.Protocol = types.TCP
+	for i := 1; i <= 100; i++ {
+		ports = append(ports, types.Port(i))
+	}
+	scan.Ports = ports
+}
+
+/*
 var (
 	verbose = false
 	hosts   []string
@@ -317,3 +325,4 @@ func main() {
 
 	logger.Printf("\nscan done.\n")
 }
+*/
