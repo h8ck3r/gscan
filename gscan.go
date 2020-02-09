@@ -10,12 +10,13 @@ var (
 	scan types.Scan
 	scanner types.Scanner
 	verbose *bool
+	err error
+	hostResults []*types.HostResult
 )
 
 func main() {
 	cli.Parse()
 	verbose = cli.GetVerbose()
-	var err error
 	scan.Targets, err = cli.GetTargets()
 	if err != nil {
 		log.Fatal(err)
@@ -27,7 +28,7 @@ func main() {
 
 	scan.Ports = cli.GetPorts()
 	scanner = &scan
-	hostResults, err := scanner.Scan()
+	hostResults, err = scanner.Scan()
 	if err != nil {
 		log.Error(err)
 	}
