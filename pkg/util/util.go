@@ -3,6 +3,7 @@ package util
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/h8ck3r/gscan/internal/cli"
 	"github.com/h8ck3r/gscan/internal/log"
 	"github.com/h8ck3r/gscan/pkg/types"
 	"github.com/pkg/errors"
@@ -118,4 +119,18 @@ func getBroadCastAddress(ipNet *net.IPNet) (net.IP, error) {
 	}
 
 	return broadcast, nil
+}
+
+func Summarize(hostResults []*types.HostResult) {
+	for _, result := range hostResults {
+		for _, portResult := range result.PortResults {
+			if portResult.State == types.Open {
+				log.Printf("discovered open port %d on %s\n", *portResult.Port, result.Host)
+			} else {
+				if *cli.GetVerbose() {
+					log.Printf("port %d on %s is closed\n", *portResult.Port, result.Host)
+				}
+			}
+		}
+	}
 }
