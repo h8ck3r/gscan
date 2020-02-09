@@ -21,7 +21,7 @@ func Parse() {
 	flag.DurationVar(&Timeout, "timeout", time.Millisecond * 500, "maximum time to wait for connection response")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		log.Fatalf("%s takes exactly one argument. %d provided\n", os.Args[0], flag.NArg())
+		log.Errorf("%s takes exactly one argument. %d provided\n", os.Args[0], flag.NArg())
 	}
 	var err error
 	Targets, err = util.GetTargets(flag.Arg(0))
