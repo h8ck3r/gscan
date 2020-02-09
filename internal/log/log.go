@@ -19,7 +19,7 @@ func Print(args ...interface{})  {
 	logger.Print(args)
 }
 
-func Prinft(format string, args ...interface{})  {
+func Printf(format string, args ...interface{})  {
 	logger.Printf(format, args...)
 }
 
@@ -37,6 +37,18 @@ func Fatalf(format string, args ...interface{})  {
 
 func Fatalln(args ...interface{}) {
 	errLogger.Fatalln(args...)
+}
+
+func Error(args ...interface{}) {
+	errLogger.Print(args)
+}
+
+func Errorf(format string, args ...interface{})  {
+	errLogger.Printf(format, args...)
+}
+
+func Errorln(args ...interface{}) {
+	errLogger.Println(args...)
 }
 
 func Panic(args ...interface{}) {
