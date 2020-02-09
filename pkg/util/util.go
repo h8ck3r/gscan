@@ -3,34 +3,38 @@ package util
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/h8ck3r/gscan/internal/log"
+	"github.com/h8ck3r/gscan/pkg/types"
 	"github.com/pkg/errors"
 	"net"
 	"regexp"
 	"strconv"
 )
 
-func GetTargets(argument string) ([]string, error) {
-	var targets []string
+func GetTargets(argument string) ([]*types.Target, error) {
+	var targets []*types.Target
 
 	if regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}$`).MatchString(argument) {
-		targets = []string{argument}
+		target := types.Target(argument)
+		targets = []*types.Target{&target}
 		return targets, nil
 	} else if regexp.MustCompile(`^([0-9]{1,3}(-[0-9]{1,3})?\.){3}[0-9]{1,3}(-[0-9]{1,3})?$`).MatchString(argument) {
 		_, _ = getHostsForIPRange(argument)
 		return targets, errors.Errorf("ip range definitions are not yet supported")
 	} else if regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`).MatchString(argument) {
+		log.Println("CIDR DETECTED")
 		return getHostsForSubnet(argument)
 	} else {
 		return targets, errors.Errorf("invalid argument: %s\n", argument)
 	}
 }
 
-func getHostsForIPRange(network string) ([]string, error) {
+func getHostsForIPRange(network string) ([]types.Target, error) {
 	network = ""
-	return []string{network}, nil
+	return []types.Target{types.Target(network)}, nil
 }
 
-func getHostsForSubnet(network string) ([]string, error) {
+func getHostsForSubnet(network string) ([]*types.Target, error) {
 	address, ipNet, err := net.ParseCIDR(network)
 	if err != nil {
 		return nil, err
@@ -40,7 +44,7 @@ func getHostsForSubnet(network string) ([]string, error) {
 		panic(err)
 	}
 
-	var ipAddresses []string
+	var ipAddresses []*types.Target
 	for ip := address.Mask(ipNet.Mask); ipNet.Contains(ip); func(ip net.IP){
 		for j := len(ip) - 1; j >= 0; j-- {
 			ip[j]++
@@ -50,7 +54,8 @@ func getHostsForSubnet(network string) ([]string, error) {
 		}
 	}(ip) {
 		if ip.String() != ipNet.IP.String() && ip.String() != broadcast.String() {
-			ipAddresses = append(ipAddresses, ip.String())
+			ipAddress := types.Target(ip.String())
+			ipAddresses = append(ipAddresses, &ipAddress)
 		}
 	}
 
