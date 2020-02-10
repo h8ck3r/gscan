@@ -9,10 +9,17 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"time"
 )
 
-func GetTargets(argument string) ([]*types.Target, error) {
+func GetTargets(argument string, debug *bool) ([]*types.Target, error) {
 	var targets []*types.Target
+	if *debug {
+		startTime := time.Now()
+		defer func() {
+			log.Printf("\nGot targets within: %v\n", time.Since(startTime))
+		}()
+	}
 
 	if regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}$`).MatchString(argument) {
 		target := types.Target(argument)

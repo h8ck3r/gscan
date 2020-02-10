@@ -15,9 +15,10 @@ import (
 func Parse() {
 	flag.Bool("verbose", false, "verbose output")
 	flag.Int("cap", 0, "maximum amount of concurrent goroutines")
-	flag.Duration("timeout", time.Millisecond * 500, "maximum time to wait for connection response")
+	flag.Duration("timeout", time.Millisecond * 250, "maximum time to wait for connection response")
 	flag.String("protocol", string(types.TCP), "protocol to use during scan")
 	flag.String("ports", "80", "ports to scan")
+	flag.Bool("debug", false, "generate pprof and trace files")
 	flag.Parse()
 	if flag.NArg() != 1 {
 		log.Fatalf("%s takes exactly one argument, %d provided\n", os.Args[0], flag.NArg())
@@ -25,7 +26,7 @@ func Parse() {
 }
 
 func GetTargets() ([]*types.Target, error) {
-	return util.GetTargets(flag.Arg(0))
+	return util.GetTargets(flag.Arg(0), GetDebug())
 }
 
 func GetVerbose() *bool {
@@ -50,6 +51,12 @@ func GetProtocol() *types.Protocol {
 
 func GetPorts() []*types.Port {
 	var ports []*types.Port
+	if *GetDebug() {
+		startTime := time.Now()
+		defer func() {
+			log.Printf("\nGot ports within: %v\n", time.Since(startTime))
+		}()
+	}
 
 	p := flag.Lookup("ports").Value.(flag.Getter).Get().(string)
 	if regexp.MustCompile(`^[0-9]+$`).MatchString(p) {
@@ -82,4 +89,9 @@ func GetPorts() []*types.Port {
 	}
 
 	return ports
+}
+
+func GetDebug() *bool {
+	d := flag.Lookup("debug").Value.(flag.Getter).Get().(bool)
+	return &d
 }
