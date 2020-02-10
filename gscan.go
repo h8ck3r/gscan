@@ -30,5 +30,5 @@ func main() {
 	if err != nil {
 		log.Error(err)
 	}
-	util.Summarize(hostResults)
+	util.Summarize(hostResults, cli.GetVerbose())
 }
